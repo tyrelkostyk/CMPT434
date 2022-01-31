@@ -39,6 +39,60 @@ typedef struct _key_value_pair_t {
 key_value_pair_t key_value_database[MAX_KEY_VAL_PAIRS] = { 0 };
 
 
+static const char *getValue(const char *key)
+{
+	// loop through entire database until a match is found
+	for (int i = 0; i < sizeof(key_value_database); i++) {
+		// match found -> return value!
+		if (strncmp(key_value_database[i].key, key, MAX_STR_LENGTH) == 0)
+			return key_value_database[i].value;
+	}
+
+	// no match found -> return NULL
+	return NULL;
+}
+
+static int add(const char *key, const char *value)
+{
+	// loop through entire database until an open spot is found
+	for (int i = 0; i < sizeof(key_value_database); i++) {
+		// open spot found -> place value!
+		if (key_value_database[i].key == NULL) {
+			strncpy(key_value_database[i].key, key, MAX_STR_LENGTH);
+			strncpy(key_value_database[i].value, value, MAX_STR_LENGTH);
+			return 0;
+		}
+	}
+
+	// no match found -> return failure
+	return -1;
+}
+
+
+static int removeKey(const char *key)
+{
+	// loop through entire database until a match is found
+	for (int i = 0; i < sizeof(key_value_database); i++) {
+		// match found -> delete key-value pair
+		if (strncmp(key_value_database[i].key, key, MAX_STR_LENGTH) == 0) {
+			memset(key_value_database[i].key, 0, MAX_STR_LENGTH);
+			memset(key_value_database[i].value, 0, MAX_STR_LENGTH);
+			return 0;
+		}
+	}
+
+	// no match found -> return failure
+	return -1;
+}
+
+
+static void quit(socket_info_t *socket)
+{
+	close(socket->socket_fd);
+	exit(-1);
+}
+
+
 int main (void)
 {
 	printf("Server initializing...\n");
@@ -49,7 +103,7 @@ int main (void)
 	struct sockaddr_storage their_addr;			// the new connection's address
 	socklen_t addr_size;						// size of incoming socket address
 	int error;									// error checking
-	socket_info_t *socket_addr;					// info and addr of new socket
+	socket_info_t socket_addr = { 0 };			// info and addr of new socket
 	int connected;
 
 	memset(&hints, 0, sizeof(hints));
@@ -113,27 +167,25 @@ int main (void)
 			addr_size = sizeof(their_addr);
 			new_socket = accept(listen_socket, (struct sockaddr *)&their_addr, &addr_size);
 
-			// allocate space for new socket_info_t struct
-			socket_addr = (socket_info_t *)malloc(sizeof(socket_info_t));
-			assert(socket_addr);
-			memset(socket_addr, 0, sizeof(socket_info_t));
-
 			// populate socket_addr struct for new thread to use
-			socket_addr->af = their_addr.ss_family;
-			socket_addr->socket_fd = new_socket;
-			socket_addr->socket_addr = (struct sockaddr *)&their_addr;
-
-			printf("New socket connection made! Socket: %03d\n", new_socket);
+			socket_addr.af = their_addr.ss_family;
+			socket_addr.socket_fd = new_socket;
+			socket_addr.socket_addr = (struct sockaddr *)&their_addr;
 
 			connected = 1;
+
+			printf("New socket connection made! Socket: %03d\n", new_socket);
 
 		// while connected, listen to what the client is saying
 		} else {
 			// TODO: implement listening to client over TCP
-			// TODO: implement key-value lookup table
-			// TODO: implement talking to client over TCP
+			// TODO: implement talking to client over TCP (receiving commands, etc.)
 		}
 
 		// TODO: handle disconnections
+
+		// reset socket_info_t struct
+		memset(&socket_addr, 0, sizeof(socket_info_t));
+
 	}
 }
