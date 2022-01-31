@@ -16,12 +16,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#define TCP_SERVER_PORT		"30123"
-#define TCP_SERVER_ADDRESS	"127.0.0.1"
-#define SERVER_BACKLOG		15
-#define MAX_STR_LENGTH		40
-#define MAX_KEY_VAL_PAIRS	20
-#define MAX_INPUT_SIZE		256
+#include "defs.h"
+
 
 /** struct that contains socket info (for easier passing of socket info) */
 typedef struct _socket_info_t {
@@ -186,7 +182,7 @@ int main (void)
 	socket_info_t socket_addr = { 0 };			// info and addr of new socket
 	int connected = 0;							// flag representing if a connection exists
 	int bytes_received;							// bytes read by recv() call
-	char recv_buffer[MAX_INPUT_SIZE];			// local receive buffer
+	char recv_buffer[MAX_BUFFER_LENGTH];		// local receive buffer
 	command_t recv_commands = { 0 };			// extracted command arguments
 
 	memset(&hints, 0, sizeof(hints));
@@ -269,7 +265,7 @@ int main (void)
 			memset(&recv_buffer, 0, sizeof(recv_buffer));
 
 			// receive incoming string message
-			bytes_received = recv(socket_addr.socket_fd, recv_buffer, MAX_INPUT_SIZE-1, 0);
+			bytes_received = recv(socket_addr.socket_fd, recv_buffer, MAX_BUFFER_LENGTH-1, 0);
 
 			// if connection closed; close connection
 			if (bytes_received <= 0) {
@@ -278,7 +274,7 @@ int main (void)
 				connected = 0;
 
 			} else {
-				printf("Message received from sender client! Socket %d\n", socket_addr.socket_fd);
+				printf("Message received from sender client! Socket %d, Length %d\n", socket_addr.socket_fd, bytes_received);
 			}
 
 			// extract arguments from received message

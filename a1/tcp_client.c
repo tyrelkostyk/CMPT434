@@ -13,7 +13,7 @@
  #include <sys/socket.h>
  #include <sys/types.h>
 
- #define MAX_BUFFER_SIZE		1024
+ #include "defs.h"
 
  /**
   * Outputs help text for the sender program.
@@ -117,52 +117,57 @@
 
      int num_sent = 0;
      size_t str_length = 0;
-	 char str[MAX_BUFFER_SIZE] = { 0 };
-	 size_t sz = MAX_BUFFER_SIZE;
+	 char str_in[MAX_BUFFER_LENGTH] = { 0 };
+	 char str_out[MAX_BUFFER_LENGTH] = { 0 };
+	 size_t sz = MAX_BUFFER_LENGTH;
      int num_rcvd = 0;
 
-     // Spin until user types quit or exit
      while (1) {
 
 		 // SEND COMMAND TO SERVER
 
-		 // reset string buffer
-		 memset(str, 0, sizeof(str));
+		 // reset input string buffer
+		 memset(str_out, 0, sizeof(str_out));
 
-         puts("send>> ");
-         getline((char **)(&str), &sz, stdin);
-
-         // if (strcmp(str, "quit\n") == 0 || strcmp(str, "exit\n") == 0)
-         //     break;
+		 fputs("send>> ", stdout);
+         getline((char **)(&str_out), &sz, stdin);
 
          // strip newline
-         str_length = strlen(str);
-         str[str_length-1] = 0;
+         str_length = strnlen(str_out, MAX_BUFFER_LENGTH);
+         str_out[str_length-1] = 0;
 
-         // Send the string
+         // send the string
          num_sent = 0;
 		 int num_sent_tmp = 0;
+		 // printf("Str: %s -- Len: %lu\n", str_out, str_length);
          do {
-             printf("Str: %s -- Len: %lu\n", &str[num_sent], str_length);
-             num_sent_tmp = send(*socket, &str[num_sent], str_length, 0);
+             num_sent_tmp = send(*socket, &str_out[num_sent], str_length, 0);
 			 num_sent += num_sent_tmp;
              str_length -= num_sent_tmp;
              printf("Num sent: %d\n", num_sent_tmp);
          } while (str_length > 0);  // Account for truncation during send
 
-		 // reset string buffer
-		 memset(str, 0, sizeof(str));
-
 		 // RECEIVE RESPONSE
 
-		 num_rcvd = recv(*socket, str, MAX_BUFFER_SIZE, 0);
-		 if (num_rcvd > 0)
-			 printf("%s\n", str);
-		 else if (num_rcvd <= -1)
-			 perror("receiver: recv");
-		 else {
-			 puts("receiver: Connection lost");
-			 break;
+		 // only need to listen for a response if we requested something
+		 if (memcmp(str_out, "get", 3) == 0) {
+			 // reset output string buffer
+			 memset(str_in, 0, sizeof(str_in));
+
+			 num_rcvd = recv(*socket, str_in, MAX_BUFFER_LENGTH, 0);
+			 if (num_rcvd > 0)
+				 printf("%s\n", str_in);
+			 else if (num_rcvd <= -1)
+				 perror("client: recv");
+			 else {
+				 puts("client: Connection lost");
+				 break;
+			 }
+
+		 // QUIT
+
+		 } else if (memcmp(str_out, "quit", 4) == 0) {
+		     break;
 		 }
      }
 
