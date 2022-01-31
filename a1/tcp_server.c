@@ -256,7 +256,7 @@ int main (void)
 
 			connected = 1;
 
-			printf("New socket connection made! Socket: %03d\n", new_socket);
+			debug(("New socket connection made! Socket: %03d\n", new_socket));
 
 		// while connected, listen to what the client is saying
 		} else {
@@ -269,12 +269,12 @@ int main (void)
 
 			// if connection closed; close connection
 			if (bytes_received <= 0) {
-				printf("Failed to communicate with sender client; closing connection...\n");
+				debug(("Failed to communicate with sender client; closing connection...\n"));
 				close(socket_addr.socket_fd);
 				connected = 0;
 
 			} else {
-				printf("Message received from sender client! Socket %d, Length %d\n", socket_addr.socket_fd, bytes_received);
+				debug(("Message received from sender client! Socket %d, Length %d\n", socket_addr.socket_fd, bytes_received));
 			}
 
 			// extract arguments from received message

@@ -139,12 +139,12 @@
          // send the string
          num_sent = 0;
 		 int num_sent_tmp = 0;
-		 printf("Str: %s -- Len: %lu\n", str_out, str_length);
+		 debug(("Str: %s -- Len: %lu\n", str_out, str_length));
          do {
              num_sent_tmp = send(*socket, &str_out[num_sent], str_length, 0);
 			 num_sent += num_sent_tmp;
              str_length -= num_sent_tmp;
-             printf("Num sent: %d\n", num_sent_tmp);
+             debug(("Num sent: %d\n", num_sent_tmp));
          } while (str_length > 0);  // Account for truncation during send
 
 		 // RECEIVE RESPONSE
@@ -156,7 +156,7 @@
 
 			 num_rcvd = recv(*socket, str_in, MAX_BUFFER_LENGTH, 0);
 			 if (num_rcvd > 0)
-				 printf("%s\n", str_in);
+				 debug(("%s\n", str_in));
 			 else if (num_rcvd <= -1)
 				 perror("client: recv");
 			 else {
