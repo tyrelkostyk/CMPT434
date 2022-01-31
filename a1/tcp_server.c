@@ -22,18 +22,20 @@
 #define MAX_STR_LENGTH		40
 #define MAX_KEY_VAL_PAIRS	20
 
-/** struct that contains a message to be transmitted and some metadata */
+/** struct that contains socket info (for easier passing of socket info) */
 typedef struct _socket_info_t {
 	int af;
 	int socket_fd;
 	struct sockaddr *socket_addr;
 } socket_info_t;
 
+/** struct that contains a string key value pair */
 typedef struct _key_value_pair_t {
 	char key[MAX_STR_LENGTH];
 	char value[MAX_STR_LENGTH];
 } key_value_pair_t;
 
+/** local database that contains all of the key-value pairs */
 key_value_pair_t key_value_database[MAX_KEY_VAL_PAIRS] = { 0 };
 
 
