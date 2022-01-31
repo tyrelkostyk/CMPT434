@@ -57,7 +57,7 @@ static const char *getValue(const char *key)
 }
 
 
-static int add(const char *key, const char *value)
+static void add(const char *key, const char *value)
 {
 	// loop through entire database until an open spot is found
 	for (int i = 0; i < sizeof(key_value_database); i++) {
@@ -65,16 +65,16 @@ static int add(const char *key, const char *value)
 		if (key_value_database[i].key == NULL) {
 			strncpy(key_value_database[i].key, key, MAX_STR_LENGTH);
 			strncpy(key_value_database[i].value, value, MAX_STR_LENGTH);
-			return 0;
+			return;
 		}
 	}
 
-	// no match found -> return failure
-	return -1;
+	// no match found
+	return;
 }
 
 
-static int removeKey(const char *key)
+static void removeKey(const char *key)
 {
 	// loop through entire database until a match is found
 	for (int i = 0; i < sizeof(key_value_database); i++) {
@@ -82,19 +82,12 @@ static int removeKey(const char *key)
 		if (strncmp(key_value_database[i].key, key, MAX_STR_LENGTH) == 0) {
 			memset(key_value_database[i].key, 0, MAX_STR_LENGTH);
 			memset(key_value_database[i].value, 0, MAX_STR_LENGTH);
-			return 0;
+			return;
 		}
 	}
 
-	// no match found -> return failure
-	return -1;
-}
-
-
-static void quit(socket_info_t *socket)
-{
-	close(socket->socket_fd);
-	exit(-1);
+	// no match found
+	return;
 }
 
 
@@ -105,7 +98,7 @@ static void extractArguments(const char *input, command_t *command, int size)
 		return;
 
 	// reset previously extracted command arguments
-	memset(&command, 0, sizeof(command_t));
+	memset(command, 0, sizeof(command_t));
 
 	int index = 0;
 	const char *input_copy = input;
@@ -183,6 +176,7 @@ int main (void)
 	int connected = 0;							// flag representing if a connection exists
 	int bytes_received;							// bytes read by recv() call
 	char recv_buffer[MAX_BUFFER_LENGTH];		// local receive buffer
+	char send_buffer[MAX_BUFFER_LENGTH];		// local transmit buffer
 	command_t recv_commands = { 0 };			// extracted command arguments
 
 	memset(&hints, 0, sizeof(hints));
@@ -261,8 +255,9 @@ int main (void)
 		// while connected, listen to what the client is saying
 		} else {
 
-			// reset receive buffer
+			// reset receive and transmit buffers
 			memset(&recv_buffer, 0, sizeof(recv_buffer));
+			memset(&send_buffer, 0, sizeof(send_buffer));
 
 			// receive incoming string message
 			bytes_received = recv(socket_addr.socket_fd, recv_buffer, MAX_BUFFER_LENGTH-1, 0);
@@ -278,12 +273,35 @@ int main (void)
 			}
 
 			// extract arguments from received message
+			extractArguments(recv_buffer, &recv_commands, bytes_received);
 
+			if (memcmp(recv_commands.cmd, "add", sizeof("add")) == 0) {
+				add(recv_commands.arg1, recv_commands.arg2);
 
-			// if (memcmp(recv_buffer, "add", sizeof("add")) == 0)
+			} else if (memcmp(recv_commands.cmd, "getvalue", sizeof("getvalue")) == 0) {
+				const char *value = NULL;
+				value = getValue(recv_commands.arg1);
 
+				if (value != NULL)
+					strncpy(send_buffer, value, MAX_STR_LENGTH);
+				else
+					debug(("Error: Key %s does not exist in database\n", recv_commands.arg1));
 
-			// TODO: implement executing commands on key-value pairs
+			} else if (memcmp(recv_commands.cmd, "getall", sizeof("getvalue")) == 0) {
+				// TODO
+
+			} else if (memcmp(recv_commands.cmd, "remove", sizeof("remove")) == 0) {
+				removeKey(recv_commands.arg1);
+
+			} else if (memcmp(recv_commands.cmd, "quit", sizeof("quit")) == 0) {
+				printf("Client requested QUIT - Goodbye\n");
+				close(socket_addr.socket_fd);
+				exit(0);
+
+			} else {
+				debug(("Error: Input %s was not recognized as a valid command\n", recv_buffer));
+			}
+
 
 			// TODO: implement talking to client over TCP
 

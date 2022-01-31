@@ -139,12 +139,10 @@
          // send the string
          num_sent = 0;
 		 int num_sent_tmp = 0;
-		 debug(("Str: %s -- Len: %lu\n", str_out, str_length));
          do {
              num_sent_tmp = send(*socket, &str_out[num_sent], str_length, 0);
 			 num_sent += num_sent_tmp;
              str_length -= num_sent_tmp;
-             debug(("Num sent: %d\n", num_sent_tmp));
          } while (str_length > 0);  // Account for truncation during send
 
 		 // RECEIVE RESPONSE
