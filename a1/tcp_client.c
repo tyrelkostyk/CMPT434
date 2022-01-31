@@ -117,8 +117,8 @@
 
      int num_sent = 0;
      size_t str_length = 0;
+	 char *str_out = NULL;
 	 char str_in[MAX_BUFFER_LENGTH] = { 0 };
-	 char str_out[MAX_BUFFER_LENGTH] = { 0 };
 	 size_t sz = MAX_BUFFER_LENGTH;
      int num_rcvd = 0;
 
@@ -126,11 +126,11 @@
 
 		 // SEND COMMAND TO SERVER
 
-		 // reset input string buffer
-		 memset(str_out, 0, sizeof(str_out));
+		 // reset output string buffer
+		 str_out = NULL;
 
 		 fputs("send>> ", stdout);
-         getline((char **)(&str_out), &sz, stdin);
+         getline(&str_out, &sz, stdin);
 
          // strip newline
          str_length = strnlen(str_out, MAX_BUFFER_LENGTH);
@@ -139,7 +139,7 @@
          // send the string
          num_sent = 0;
 		 int num_sent_tmp = 0;
-		 // printf("Str: %s -- Len: %lu\n", str_out, str_length);
+		 printf("Str: %s -- Len: %lu\n", str_out, str_length);
          do {
              num_sent_tmp = send(*socket, &str_out[num_sent], str_length, 0);
 			 num_sent += num_sent_tmp;
@@ -151,7 +151,7 @@
 
 		 // only need to listen for a response if we requested something
 		 if (memcmp(str_out, "get", 3) == 0) {
-			 // reset output string buffer
+			 // reset input string buffer
 			 memset(str_in, 0, sizeof(str_in));
 
 			 num_rcvd = recv(*socket, str_in, MAX_BUFFER_LENGTH, 0);
