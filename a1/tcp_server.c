@@ -174,7 +174,9 @@ int main (void)
 	int error;									// error checking
 	socket_info_t socket_addr = { 0 };			// info and addr of new socket
 	int connected = 0;							// flag representing if a connection exists
-	int bytes_received;							// bytes read by recv() call
+	int bytes_received = 0;						// bytes read by recv() call
+	int bytes_remaining = 0;					// bytes to be sent by send() call
+	int bytes_sent = 0;							// bytes sent by send() call
 	char recv_buffer[MAX_BUFFER_LENGTH];		// local receive buffer
 	char send_buffer[MAX_BUFFER_LENGTH];		// local transmit buffer
 	command_t recv_commands = { 0 };			// extracted command arguments
@@ -275,6 +277,7 @@ int main (void)
 			// extract arguments from received message
 			extractArguments(recv_buffer, &recv_commands, bytes_received);
 
+			bytes_remaining = 0;
 			if (memcmp(recv_commands.cmd, "add", sizeof("add")) == 0) {
 				add(recv_commands.arg1, recv_commands.arg2);
 
@@ -282,13 +285,18 @@ int main (void)
 				const char *value = NULL;
 				value = getValue(recv_commands.arg1);
 
-				if (value != NULL)
+				if (value != NULL) {
 					strncpy(send_buffer, value, MAX_STR_LENGTH);
-				else
+					bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
+				} else {
 					debug(("Error: Key %s does not exist in database\n", recv_commands.arg1));
+					strncpy(send_buffer, "Error: Key does not exist in database", MAX_STR_LENGTH);
+					bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
+				}
 
 			} else if (memcmp(recv_commands.cmd, "getall", sizeof("getvalue")) == 0) {
 				// TODO
+				// bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
 
 			} else if (memcmp(recv_commands.cmd, "remove", sizeof("remove")) == 0) {
 				removeKey(recv_commands.arg1);
@@ -302,12 +310,22 @@ int main (void)
 				debug(("Error: Input %s was not recognized as a valid command\n", recv_buffer));
 			}
 
+			if (bytes_remaining > 0) {
+				bytes_sent = send(socket_addr.socket_fd,
+					send_buffer,
+					bytes_remaining,
+					MSG_NOSIGNAL);
 
-			// TODO: implement talking to client over TCP
+				// if error or connection closed; kill this thread
+				if (bytes_sent <= 0) {
+					debug(("Failed to communicate with client; disconnecting...\n"));
+					close(socket_addr.socket_fd);
+					connected = 0;
 
+				} else {
+					debug(("Message sent to client! Socket %d\n", socket_addr.socket_fd));
+				}
+			}
 		}
-
-		// TODO: handle disconnections
-
 	}
 }

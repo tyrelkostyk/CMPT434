@@ -148,7 +148,9 @@
 		 // RECEIVE RESPONSE
 
 		 // only need to listen for a response if we requested something
-		 if (memcmp(str_out, "get", 3) == 0) {
+		 if ((memcmp(str_out, "getvalue", sizeof("getvalue")) == 0)
+	 	  || (memcmp(str_out, "getall",   sizeof("getall")) == 0))
+		  {
 			 // reset input string buffer
 			 memset(str_in, 0, sizeof(str_in));
 
@@ -164,7 +166,7 @@
 
 		 // QUIT
 
-		 } else if (memcmp(str_out, "quit", 4) == 0) {
+	 } else if (memcmp(str_out, "quit", sizeof("quit")) == 0) {
 		     break;
 		 }
      }
