@@ -184,7 +184,7 @@ int main (void)
 	socklen_t addr_size;						// size of incoming socket address
 	int error;									// error checking
 	socket_info_t socket_addr = { 0 };			// info and addr of new socket
-	int connected;								// flag representing if a connection exists
+	int connected = 0;							// flag representing if a connection exists
 	int bytes_received;							// bytes read by recv() call
 	char recv_buffer[MAX_INPUT_SIZE];			// local receive buffer
 	command_t recv_commands = { 0 };			// extracted command arguments
@@ -273,7 +273,7 @@ int main (void)
 
 			// if connection closed; close connection
 			if (bytes_received <= 0) {
-				printf("Failed to communicate with sender client; killing thread...\n");
+				printf("Failed to communicate with sender client; closing connection...\n");
 				close(socket_addr.socket_fd);
 				connected = 0;
 
