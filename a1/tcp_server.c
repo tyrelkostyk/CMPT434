@@ -30,6 +30,7 @@ typedef struct _socket_info_t {
 typedef struct _key_value_pair_t {
 	char key[MAX_STR_LENGTH];
 	char value[MAX_STR_LENGTH];
+	int valid;
 } key_value_pair_t;
 
 /** struct that contains a string command and arguments */
@@ -46,10 +47,14 @@ key_value_pair_t key_value_database[MAX_KEY_VAL_PAIRS] = { 0 };
 static const char *getValue(const char *key)
 {
 	// loop through entire database until a match is found
-	for (int i = 0; i < sizeof(key_value_database); i++) {
+	for (int i = 0; i < MAX_KEY_VAL_PAIRS; i++) {
 		// match found -> return value!
-		if (strncmp(key_value_database[i].key, key, MAX_STR_LENGTH) == 0)
+		if ((strncmp(key_value_database[i].key, key, MAX_STR_LENGTH) == 0)
+		&&  (key_value_database[i].valid == 1))
+		{
+			debug(("Returning Keyed ('%s') Value '%s' from database\n", key_value_database[i].key, key_value_database[i].value));
 			return key_value_database[i].value;
+		}
 	}
 
 	// no match found -> return NULL
@@ -59,17 +64,24 @@ static const char *getValue(const char *key)
 
 static void add(const char *key, const char *value)
 {
+	// first, ensure that this key is not already in the system
+	if (getValue(key) != NULL)
+		return;
+
 	// loop through entire database until an open spot is found
-	for (int i = 0; i < sizeof(key_value_database); i++) {
+	for (int i = 0; i < MAX_KEY_VAL_PAIRS; i++) {
 		// open spot found -> place value!
-		if (key_value_database[i].key == NULL) {
+		if (key_value_database[i].valid == 0) {
+			debug(("Adding Key '%s' and Value '%s' to database\n", key, value));
 			strncpy(key_value_database[i].key, key, MAX_STR_LENGTH);
 			strncpy(key_value_database[i].value, value, MAX_STR_LENGTH);
+			key_value_database[i].valid = 1;
 			return;
 		}
 	}
 
 	// no match found
+	debug(("Error: could not add Key '%s' to database\n", key));
 	return;
 }
 
@@ -77,11 +89,13 @@ static void add(const char *key, const char *value)
 static void removeKey(const char *key)
 {
 	// loop through entire database until a match is found
-	for (int i = 0; i < sizeof(key_value_database); i++) {
+	for (int i = 0; i < MAX_KEY_VAL_PAIRS; i++) {
 		// match found -> delete key-value pair
 		if (strncmp(key_value_database[i].key, key, MAX_STR_LENGTH) == 0) {
+			debug(("Removing Key '%s' and Value '%s' from database\n", key_value_database[i].key, key_value_database[i].value));
 			memset(key_value_database[i].key, 0, MAX_STR_LENGTH);
 			memset(key_value_database[i].value, 0, MAX_STR_LENGTH);
+			key_value_database[i].valid = 0;
 			return;
 		}
 	}
@@ -112,16 +126,19 @@ static void extractArguments(const char *input, command_t *command, int size)
 		index++;
 	}
 
-	// if we're out of room -> exit
+	// if we're at the end of the string -> exit
 	if (index >= size_remaining)
 		return;
 
 	// copy command name into command struct (if ended on space or term byte)
 	strncpy(command->cmd, input_copy, index);
 
+	// skip over the space
+	index++;
+
 	// update local cursor variables to point to start of next argument
-	size_remaining -= index + 1;
-	input_copy = &input[index + 1];
+	size_remaining -= index;
+	input_copy = &input[index];
 	index = 0;
 
 	// move cursor to end of first argument (i.e. arg1)
@@ -132,15 +149,19 @@ static void extractArguments(const char *input, command_t *command, int size)
 		index++;
 	}
 
-	// if we're out of room -> exit
+	// if we're at the end of the string -> exit
 	if (index >= size_remaining)
 		return;
 
 	// copy first argument into command struct
 	strncpy(command->arg1, input_copy, index);
+
+	// skip over the space
+	index++;
+
 	// update local cursor variables to point to start of next argument
-	size_remaining -= index + 1;
-	input_copy = &input[index + 1];
+	size_remaining -= index;
+	input_copy = &input_copy[index];
 	index = 0;
 
 	// move cursor to end of second argument (i.e. arg2)
@@ -151,7 +172,7 @@ static void extractArguments(const char *input, command_t *command, int size)
 		index++;
 	}
 
-	// if we're out of room -> exit
+	// if we're at the end of the string -> exit
 	if (index >= size_remaining)
 		return;
 
@@ -180,6 +201,8 @@ int main (void)
 	char recv_buffer[MAX_BUFFER_LENGTH];		// local receive buffer
 	char send_buffer[MAX_BUFFER_LENGTH];		// local transmit buffer
 	command_t recv_commands = { 0 };			// extracted command arguments
+
+	memset(&key_value_database, 0, sizeof(key_value_database));
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;		// don't care if IPv4 or IPv6
@@ -276,20 +299,21 @@ int main (void)
 
 			// extract arguments from received message
 			extractArguments(recv_buffer, &recv_commands, bytes_received);
+			debug(("Extracted:\nCommand '%s'\nArg1 '%s'\nArg2 '%s'\n", recv_commands.cmd, recv_commands.arg1, recv_commands.arg2));
 
 			bytes_remaining = 0;
 			if (memcmp(recv_commands.cmd, "add", sizeof("add")) == 0) {
 				add(recv_commands.arg1, recv_commands.arg2);
 
 			} else if (memcmp(recv_commands.cmd, "getvalue", sizeof("getvalue")) == 0) {
-				const char *value = NULL;
-				value = getValue(recv_commands.arg1);
+				const char *value = getValue(recv_commands.arg1);
 
 				if (value != NULL) {
+					debug(("Returning Value '%s' of Key '%s' in database\n", value, recv_commands.arg1));
 					strncpy(send_buffer, value, MAX_STR_LENGTH);
 					bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
 				} else {
-					debug(("Error: Key %s does not exist in database\n", recv_commands.arg1));
+					debug(("Error: Key '%s' does not exist in database\n", recv_commands.arg1));
 					strncpy(send_buffer, "Error: Key does not exist in database", MAX_STR_LENGTH);
 					bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
 				}
@@ -307,7 +331,7 @@ int main (void)
 				exit(0);
 
 			} else {
-				debug(("Error: Input %s was not recognized as a valid command\n", recv_buffer));
+				debug(("Error: Input '%s' was not recognized as a valid command\n", recv_buffer));
 			}
 
 			if (bytes_remaining > 0) {
