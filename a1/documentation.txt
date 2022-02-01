@@ -1,0 +1,25 @@
+/**
+ * CMPT 434 Assignment 1
+ * Monday January 31 2022
+ * Tyrel Kostyk - tck290 - 11216033
+**/
+
+Instructions to Run:
+1. Start up the tcp_server program. It will default to run on the local machine
+address (127.0.0.1), on port 30123
+2. Start up a single tcp_client program, on the aforementioned address and port
+3. Add and remove key-value pairs as necessary (as described in the a1 spec)
+4. Get values one at a time or all at once (again, as described in the a1 spec)
+5. Quit both the client and server at the same time by sending 'quit'
+
+Other notes and comments:
+- Clients can manually disconnect (e.g. with ctrl+c) and reconnect, and the
+server will still be able to communicate and continue operation as normal
+without having lost any key-value pairs (so long as the server never stopped)
+- This TCP Client-Server implementation can only support a single connection
+at a time. Multiple connections could've been added with a fairly similar
+implementation / complexity. All that would need to be changed is the
+incorporation of pthreads. Of course this would also require the use of resource
+protection and concurrency management (e.g. mutexes).
+- I did not complete the Proxy or UDP implementations as defined in the
+assignment specification. It's been a rough start to the semester...
