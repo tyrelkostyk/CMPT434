@@ -86,6 +86,41 @@ static void add(const char *key, const char *value)
 }
 
 
+static const char *getAll(void)
+{
+	char *all_values = (char *)malloc(MAX_BUFFER_LENGTH);
+	assert(all_values);
+	memset(all_values, 0, MAX_BUFFER_LENGTH);
+
+	int first_value = 1;
+	int cursor = 0;
+
+	// loop through entire database, appending all values
+	for (int i = 0; i < MAX_KEY_VAL_PAIRS; i++) {
+		if (key_value_database[i].valid == 1) {
+			// separate pairs with semicolons
+			if (!first_value) {
+				cursor += snprintf(&all_values[cursor], sizeof("; "), "; ");
+			} else {
+				first_value = !first_value;
+			}
+
+
+			cursor += snprintf(&all_values[cursor],
+				MAX_STR_LENGTH * 2 + 4,
+				"(%s, %s)",
+				key_value_database[i].key,
+				key_value_database[i].value);
+		}
+	}
+
+	// add terminating null byte to end of string
+	sprintf(&all_values[cursor], ";");
+
+	return all_values;
+}
+
+
 static void removeKey(const char *key)
 {
 	// loop through entire database until a match is found
@@ -318,9 +353,10 @@ int main (void)
 					bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
 				}
 
-			} else if (memcmp(recv_commands.cmd, "getall", sizeof("getvalue")) == 0) {
-				// TODO
-				// bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
+			} else if (memcmp(recv_commands.cmd, "getall", sizeof("getall")) == 0) {
+				const char *values = getAll();
+				strncpy(send_buffer, values, MAX_BUFFER_LENGTH);
+				bytes_remaining = strnlen(send_buffer, MAX_BUFFER_LENGTH);
 
 			} else if (memcmp(recv_commands.cmd, "remove", sizeof("remove")) == 0) {
 				removeKey(recv_commands.arg1);
