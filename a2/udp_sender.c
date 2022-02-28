@@ -47,10 +47,10 @@ int main(int argc, char* argv[])
 	int input_message_length = 0;				// length of input message
 	int bytes_sent, bytes_sent_tmp = 0;			// bytes sent by sendto() call
 
-	char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
+	// char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
 	int send_size = 0;
 	char recv_buffer[MAX_BUFFER_LENGTH];	// local receive buffer
-	// packet_t packet = { 0 };
+	packet_t packet = { 0 };
 	int sequence_number = 0;
 
 	// prepare for a UDP socket using IPv4 on the local machine
@@ -92,13 +92,16 @@ int main(int argc, char* argv[])
 	while (1) {
 
 		// reset counters, buffers
-		bytes_sent = 0;
-		bytes_sent_tmp = 0;
-		input_message_length = 0;
-		input_message = NULL;
 		memset(recv_buffer, 0, sizeof(recv_buffer));
-		memset(send_buffer, 0, sizeof(send_buffer));
-		// memset(packet, 0, sizeof(packet));
+		// memset(send_buffer, 0, sizeof(send_buffer));
+		memset(&packet, 0, sizeof(packet));
+		input_message = NULL;
+
+		input_message_length = 0;
+		send_size = 0;
+
+		bytes_sent_tmp = 0;
+		bytes_sent = 0;
 
 		// obtain user input message from stdin
 		fputs("send>> ", stdout);
@@ -108,9 +111,13 @@ int main(int argc, char* argv[])
         input_message_length = strnlen(input_message, MAX_BUFFER_LENGTH);
         input_message[input_message_length-1] = 0;
 
-		// add sequence number
-		memcpy(send_buffer, &sequence_number, sizeof(sequence_number));
-		strncpy(&send_buffer[sizeof(sequence_number)], input_message, MAX_BUFFER_LENGTH-sizeof(sequence_number));
+		// create packet - add sequence number
+		// memcpy(send_buffer, &sequence_number, sizeof(sequence_number));
+		// strncpy(&send_buffer[sizeof(sequence_number)], input_message, MAX_BUFFER_LENGTH-sizeof(sequence_number));
+		// send_size = input_message_length + sizeof(sequence_number);
+
+		packet.sequence_number = sequence_number;
+		strncpy(packet.message, input_message, input_message_length);
 		send_size = input_message_length + sizeof(sequence_number);
 
 		// TODO: add packet to FIFO queue
@@ -121,11 +128,11 @@ int main(int argc, char* argv[])
 		do {
 			// send over UDP
 			// debug(("About to send: %s -- Len: %d\n", input_message, input_message_length));
-			debug(("About to send: %s -- Len: %d\n", send_buffer, send_size));
+			debug(("About to send: %s -- Len: %d\n", packet.message, send_size));
 			bytes_sent_tmp = sendto(send_socket,
 									// &input_message[bytes_sent],
 									// input_message_length,
-									&send_buffer[bytes_sent],
+									&((char*)&packet)[bytes_sent],
 									send_size,
 									flags,
 									p->ai_addr,
@@ -144,6 +151,9 @@ int main(int argc, char* argv[])
 		} while (send_size > 0);  // account for truncation during send
 
 		// TODO: receive ACK
+
+		// increment sequence number
+		sequence_number++;
 
 		// TODO: stop listening after timeout
 

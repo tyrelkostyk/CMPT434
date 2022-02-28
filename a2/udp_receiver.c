@@ -51,11 +51,14 @@ int main(int argc, char* argv[])
    	// socket_info_t socket_addr = { 0 };	// info and addr of new socket
 
    	int bytes_received = 0;					// bytes read by recvfrom() call
-   	int bytes_remaining = 0;				// bytes to be sent by sendto() call
-   	int bytes_sent = 0;						// bytes sent by sendto() call
+   	// int bytes_remaining = 0;				// bytes to be sent by sendto() call
+   	// int bytes_sent = 0;						// bytes sent by sendto() call
 
    	char recv_buffer[MAX_BUFFER_LENGTH];	// local receive buffer
-   	char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
+   	// char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
+
+	packet_t packet = { 0 };
+	int sequence_number = 0;
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -104,20 +107,26 @@ int main(int argc, char* argv[])
 
 		// reset the counters and buffers
 		memset(recv_buffer, 0, sizeof(recv_buffer));
-		memset(send_buffer, 0, sizeof(send_buffer));
+		// memset(send_buffer, 0, sizeof(send_buffer));
+		memset(&packet, 0, sizeof(packet));
 		bytes_received = 0;
-	   	bytes_remaining = 0;
-	   	bytes_sent = 0;
+	   	// bytes_remaining = 0;
+	   	// bytes_sent = 0;
 
 		// receive message from client
 		bytes_received = recvfrom(listen_socket, recv_buffer, MAX_BUFFER_LENGTH-1, flags, NULL, NULL);
 
-		if (bytes_received > 0)
-			debug(("%d bytes received from sender\n", bytes_received));
+		if (bytes_received <= 0) {
+			printf("Receiver: failed to receive\n");
+			exit(-1);
+		}
+
+		debug(("%d bytes received from sender\n", bytes_received));
+
+		memcpy(&packet, recv_buffer, bytes_received);
 
 		// print the received message to stdout
-		// TODO: include the packet sequence number
-		printf("%s\n", recv_buffer);
+		printf("%d: %s\n", packet.sequence_number, packet.message);
 
 		// TODO: check for validity
 
