@@ -18,5 +18,10 @@
 #define MAX_BUFFER_LENGTH	1024
 #define LOCAL_ADDRESS		"127.0.0.1"
 
+// typedef struct _packet_t {
+// 	int sequence_number;
+// 	char* message;
+// 	// char message[MAX_BUFFER_LENGTH];
+// } packet_t;
 
 #endif  // _DEFS_H_

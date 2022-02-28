@@ -47,8 +47,11 @@ int main(int argc, char* argv[])
 	int input_message_length = 0;				// length of input message
 	int bytes_sent, bytes_sent_tmp = 0;			// bytes sent by sendto() call
 
+	char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
+	int send_size = 0;
 	char recv_buffer[MAX_BUFFER_LENGTH];	// local receive buffer
-   	char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
+	// packet_t packet = { 0 };
+	int sequence_number = 0;
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -95,6 +98,7 @@ int main(int argc, char* argv[])
 		input_message = NULL;
 		memset(recv_buffer, 0, sizeof(recv_buffer));
 		memset(send_buffer, 0, sizeof(send_buffer));
+		// memset(packet, 0, sizeof(packet));
 
 		// obtain user input message from stdin
 		fputs("send>> ", stdout);
@@ -104,17 +108,25 @@ int main(int argc, char* argv[])
         input_message_length = strnlen(input_message, MAX_BUFFER_LENGTH);
         input_message[input_message_length-1] = 0;
 
-		// TODO: add sequence number, place in packet struct
+		// add sequence number
+		memcpy(send_buffer, &sequence_number, sizeof(sequence_number));
+		strncpy(&send_buffer[sizeof(sequence_number)], input_message, MAX_BUFFER_LENGTH-sizeof(sequence_number));
+		send_size = input_message_length + sizeof(sequence_number);
 
 		// TODO: add packet to FIFO queue
+
+		// TODO: only send message if non-ACK'd messages are less than the window size
 
 		// send the message
 		do {
 			// send over UDP
-			debug(("About to send: %s -- Len: %d\n", input_message, input_message_length));
+			// debug(("About to send: %s -- Len: %d\n", input_message, input_message_length));
+			debug(("About to send: %s -- Len: %d\n", send_buffer, send_size));
 			bytes_sent_tmp = sendto(send_socket,
-									&input_message[bytes_sent],
-									input_message_length,
+									// &input_message[bytes_sent],
+									// input_message_length,
+									&send_buffer[bytes_sent],
+									send_size,
 									flags,
 									p->ai_addr,
 									p->ai_addrlen);
@@ -125,11 +137,15 @@ int main(int argc, char* argv[])
 			}
 			// increment string pointer
 			bytes_sent += bytes_sent_tmp;
-			input_message_length -= bytes_sent;
+			// input_message_length -= bytes_sent;
+			send_size -= bytes_sent;
 			debug(("Bytes sent: %d\n", bytes_sent));
-		} while (input_message_length > 0);  // account for truncation during send
+		// } while (input_message_length > 0);  // account for truncation during send
+		} while (send_size > 0);  // account for truncation during send
 
 		// TODO: receive ACK
+
+		// TODO: stop listening after timeout
 
 	}
 
