@@ -43,15 +43,14 @@ int main(int argc, char* argv[])
 	int flags = 0;						// connection flagsc
 
 	size_t max_buffer_size = MAX_BUFFER_LENGTH;	// max buffer size
-	char *input_message = NULL;					// local input message (from stdin)
-	int input_message_length = 0;				// length of input message
-	int bytes_sent, bytes_sent_tmp = 0;			// bytes sent by sendto() call
+	char *input_message = NULL;			// local input message (from stdin)
+	int input_message_length = 0;		// length of input message
 
-	// char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
-	int send_size = 0;
-	char recv_buffer[MAX_BUFFER_LENGTH];	// local receive buffer
 	packet_t packet = { 0 };
 	int sequence_number = 0;
+
+	int send_size = 0;
+	int bytes_sent, bytes_sent_tmp = 0;	// bytes sent by sendto() call
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -91,17 +90,14 @@ int main(int argc, char* argv[])
 
 	while (1) {
 
-		// reset counters, buffers
-		memset(recv_buffer, 0, sizeof(recv_buffer));
-		// memset(send_buffer, 0, sizeof(send_buffer));
+		// reset buffers, pointers
 		memset(&packet, 0, sizeof(packet));
 		input_message = NULL;
 
+		// reset counters
+		bytes_sent = 0, bytes_sent_tmp = 0;
 		input_message_length = 0;
 		send_size = 0;
-
-		bytes_sent_tmp = 0;
-		bytes_sent = 0;
 
 		// obtain user input message from stdin
 		fputs("send>> ", stdout);
@@ -111,11 +107,7 @@ int main(int argc, char* argv[])
         input_message_length = strnlen(input_message, MAX_BUFFER_LENGTH);
         input_message[input_message_length-1] = 0;
 
-		// create packet - add sequence number
-		// memcpy(send_buffer, &sequence_number, sizeof(sequence_number));
-		// strncpy(&send_buffer[sizeof(sequence_number)], input_message, MAX_BUFFER_LENGTH-sizeof(sequence_number));
-		// send_size = input_message_length + sizeof(sequence_number);
-
+		// populate packet - add sequence number
 		packet.sequence_number = sequence_number;
 		strncpy(packet.message, input_message, input_message_length);
 		send_size = input_message_length + sizeof(sequence_number);
@@ -127,11 +119,8 @@ int main(int argc, char* argv[])
 		// send the message
 		do {
 			// send over UDP
-			// debug(("About to send: %s -- Len: %d\n", input_message, input_message_length));
 			debug(("About to send: %s -- Len: %d\n", packet.message, send_size));
 			bytes_sent_tmp = sendto(send_socket,
-									// &input_message[bytes_sent],
-									// input_message_length,
 									&((char*)&packet)[bytes_sent],
 									send_size,
 									flags,
@@ -142,12 +131,10 @@ int main(int argc, char* argv[])
 				printf("Sender: failed to send\n");
 				exit(-1);
 			}
-			// increment string pointer
+			// increment counter
 			bytes_sent += bytes_sent_tmp;
-			// input_message_length -= bytes_sent;
 			send_size -= bytes_sent;
 			debug(("Bytes sent: %d\n", bytes_sent));
-		// } while (input_message_length > 0);  // account for truncation during send
 		} while (send_size > 0);  // account for truncation during send
 
 		// TODO: receive ACK

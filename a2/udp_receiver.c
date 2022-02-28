@@ -51,8 +51,6 @@ int main(int argc, char* argv[])
    	// socket_info_t socket_addr = { 0 };	// info and addr of new socket
 
    	int bytes_received = 0;					// bytes read by recvfrom() call
-   	// int bytes_remaining = 0;				// bytes to be sent by sendto() call
-   	// int bytes_sent = 0;						// bytes sent by sendto() call
 
    	char recv_buffer[MAX_BUFFER_LENGTH];	// local receive buffer
    	// char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
@@ -105,13 +103,10 @@ int main(int argc, char* argv[])
 
 	while (1) {
 
-		// reset the counters and buffers
+		// reset counters, buffers
 		memset(recv_buffer, 0, sizeof(recv_buffer));
-		// memset(send_buffer, 0, sizeof(send_buffer));
 		memset(&packet, 0, sizeof(packet));
 		bytes_received = 0;
-	   	// bytes_remaining = 0;
-	   	// bytes_sent = 0;
 
 		// receive message from client
 		bytes_received = recvfrom(listen_socket, recv_buffer, MAX_BUFFER_LENGTH-1, flags, NULL, NULL);
@@ -123,9 +118,10 @@ int main(int argc, char* argv[])
 
 		debug(("%d bytes received from sender\n", bytes_received));
 
+		// convert received data into packet
 		memcpy(&packet, recv_buffer, bytes_received);
 
-		// print the received message to stdout
+		// print the received message and sequence number to stdout
 		printf("%d: %s\n", packet.sequence_number, packet.message);
 
 		// TODO: check for validity
