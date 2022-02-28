@@ -3,36 +3,36 @@
 # Verbose, i.e. whether the compiler will define the DEBUG macro
 V=0
 
-UDP_SRV=udp_server
-UDP_CLNT=udp_client
+UDP_RECV=udp_receiver
+UDP_SEND=udp_sender
 
-SRCFILES=$(UDP_SRV).c $(UDP_CLNT).c
+SRCFILES=$(UDP_RECV).c $(UDP_SEND).c
 # HDRFILES = defs.h
-OBJFILES=$(UDP_SRV).o $(UDP_CLNT).O
+OBJFILES=$(UDP_RECV).o $(UDP_SEND).O
 
 CFLAGS=-Wall
 
-all: $(UDP_SRV).out $(UDP_CLNT).out
+all: $(UDP_RECV).out $(UDP_SEND).out
 
-$(UDP_SRV).out: $(UDP_SRV).o
-	gcc $(CFLAGS) $(UDP_SRV).o -o $(UDP_SRV).out
+$(UDP_RECV).out: $(UDP_RECV).o
+	gcc $(CFLAGS) $(UDP_RECV).o -o $(UDP_RECV).out
 
-$(UDP_SRV).o: $(UDP_SRV).c
+$(UDP_RECV).o: $(UDP_RECV).c
 ifeq ($(V), 1)
-	gcc $(CFLAGS) -DDEBUG -c $(UDP_SRV).c
+	gcc $(CFLAGS) -DDEBUG -c $(UDP_RECV).c
 else
-	gcc $(CFLAGS) -c $(UDP_SRV).c
+	gcc $(CFLAGS) -c $(UDP_RECV).c
 endif
 
-$(UDP_CLNT).out: $(UDP_CLNT).o
-	gcc $(CFLAGS) $(UDP_CLNT).o -o $(UDP_CLNT).out
+$(UDP_SEND).out: $(UDP_SEND).o
+	gcc $(CFLAGS) $(UDP_SEND).o -o $(UDP_SEND).out
 
-$(UDP_CLNT).o: $(UDP_CLNT).c
+$(UDP_SEND).o: $(UDP_SEND).c
 ifeq ($(V), 1)
-	gcc $(CFLAGS) -DDEBUG -c $(UDP_CLNT).c
+	gcc $(CFLAGS) -DDEBUG -c $(UDP_SEND).c
 else
-	gcc $(CFLAGS) -c $(UDP_CLNT).c
+	gcc $(CFLAGS) -c $(UDP_SEND).c
 endif
 
 clean:
-	rm -f *.o $(UDP_SRV).out $(UDP_CLNT).out
+	rm -f *.o $(UDP_RECV).out $(UDP_SEND).out

@@ -30,13 +30,18 @@
 
 int main(int argc, char* argv[])
 {
-	printf("Server initializing...\n");
-	printf("Clients may connect to the UDP Server via Port %s on Address %s\n",
-		   SERVER_PORT,
-		   SERVER_ADDRESS);
+   if (argc < 2) {
+		printf("Error: invalid input received");
+		exit(-1);
+	}
+
+	char* recv_port = argv[1];
+
+	printf("UDP Receiver initializing...\n");
+	printf("Sender may connect to the UDP Receiver via Address %s on Port %s\n",
+		   LOCAL_ADDRESS, recv_port);
 
 	int error;								// error checking
-
 	int listen_socket;						// socket for listening
    	struct addrinfo hints, *info, *p;		// obtaining socket address info
 	int flags = 0;							// no flags necessary for receiving/sending
@@ -59,9 +64,9 @@ int main(int argc, char* argv[])
 	hints.ai_flags = AI_PASSIVE;	// use host machine IP
 
    	// obtain information about the location of available UDP sockets
-   	error = getaddrinfo(NULL, SERVER_PORT, &hints, &info);
+   	error = getaddrinfo(NULL, recv_port, &hints, &info);
    	if (error) {
-   		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(error));
+   		fprintf(stderr, "Receiver: getaddrinfo: %s\n", gai_strerror(error));
    		exit(-1);
    	}
 
@@ -69,13 +74,13 @@ int main(int argc, char* argv[])
    	for (p = info; p != NULL; p = p->ai_next) {
    		listen_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
    		if (listen_socket == -1) {
-   			perror("server: socket");
+   			perror("Receiver: socket");
    			continue;
    		}
 
    		if (bind(listen_socket, p->ai_addr, p->ai_addrlen) == -1) {
    			close(listen_socket);
-   			perror("server: bind");
+   			perror("Receiver: bind");
    			continue;
    		}
 
@@ -85,7 +90,7 @@ int main(int argc, char* argv[])
 
    	// ensure a socket was bound to
    	if (p == NULL) {
-   		fprintf(stderr, "server: failed to bind\n");
+   		fprintf(stderr, "Receiver: failed to bind\n");
    		exit(-1);
    	}
 
@@ -93,7 +98,7 @@ int main(int argc, char* argv[])
    	freeaddrinfo(info);
 
 	// begin listening
-	debug(("Server: Listening...\n"));
+	debug(("Receiver: Listening...\n"));
 
 	while (1) {
 
@@ -108,7 +113,7 @@ int main(int argc, char* argv[])
 		bytes_received = recvfrom(listen_socket, recv_buffer, MAX_BUFFER_LENGTH-1, flags, NULL, NULL);
 
 		if (bytes_received > 0)
-			debug(("%d bytes received from client", bytes_received));
+			debug(("%d bytes received from sender\n", bytes_received));
 
 		// print the received message to stdout
 		// TODO: include the packet sequence number

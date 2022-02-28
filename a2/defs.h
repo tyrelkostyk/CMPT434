@@ -16,8 +16,7 @@
 
 /** SHARED DEFINITIONS **/
 #define MAX_BUFFER_LENGTH	1024
-#define SERVER_PORT			"30123"
-#define SERVER_ADDRESS		"127.0.0.1"
+#define LOCAL_ADDRESS		"127.0.0.1"
 
 
 #endif  // _DEFS_H_
