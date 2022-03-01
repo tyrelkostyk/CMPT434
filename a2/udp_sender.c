@@ -28,7 +28,7 @@ static void packetReceive(void);
 
 static void fifoPush(const packet_t* packet);
 static void fifoPop(packet_t* packet);
-static void fifoPeek(packet_t* packet);
+static void fifoPeekNewest(packet_t* packet);
 static int fifoEmpty(void);
 static int fifoFull(void);
 
@@ -204,7 +204,7 @@ static void packetSend(struct addrinfo *p)
 
 	// obtain oldest packet from FIFO
 	packet_t packet = { 0 };
-	fifoPeek(&packet);
+	fifoPeekNewest(&packet);
 
 	// determine size of message
 	int send_size = strnlen(packet.message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
@@ -336,29 +336,29 @@ static void fifoPop(packet_t* packet)
 
 
 /**
- * Extract (but don't remove) a packet from the FIFO Queue.
+ * Extract (but don't remove) the newest packet from the FIFO Queue.
  * @param packet Pointer that packet will be extracted into.
  */
-static void fifoPeek(packet_t* packet)
+static void fifoPeekNewest(packet_t* packet)
 {
 	// confirm that packet pointer is valid
 	if (packet == 0) {
-		debug(("fifoPeek: input pointer is NULL\n"));
+		debug(("fifoPeekNewest: input pointer is NULL\n"));
 		exit(-1);
 	}
 
 	// confirm that there is a valid packet within FIFO
 	if (fifoEmpty()) {
-		debug(("fifoPeek: FIFO is empty\n"));
+		debug(("fifoPeekNewest: FIFO is empty\n"));
 		exit(-1);
 	}
 
 	// determine size of packet
-	int packet_size = strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+	int packet_size = strnlen(packet_fifo[packet_fifo_write_cursor-1].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
 
 	// extract packet from FIFO
 	memcpy(packet,
-		   &packet_fifo[packet_fifo_read_cursor],
+		   &packet_fifo[packet_fifo_write_cursor-1],
 		   packet_size);
 }
 
