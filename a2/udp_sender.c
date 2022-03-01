@@ -185,7 +185,7 @@ static void packetPrepare(void)
 	strncpy(packet.message, input_message, input_message_length);
 
 	// push packet onto FIFO queue
-	debug(("About to push <%d: %s> onto FIFO\n", packet.sequence_number, packet.message));
+	debug(("packetPrepare: about to push <%d: %s> onto FIFO\n", packet.sequence_number, packet.message));
 	fifoPush(&packet);
 }
 
@@ -211,7 +211,7 @@ static void packetSend(struct addrinfo *p)
 
 	// send the message
 	do {
-		debug(("packetSend: About to send: %s -- Len: %d\n", packet.message, send_size));
+		debug(("packetSend: about to send: %s -- Len: %d\n", packet.message, send_size));
 
 		// send over UDP
 		int bytes_sent = 0;
@@ -232,7 +232,6 @@ static void packetSend(struct addrinfo *p)
 		// increment counter
 		bytes_sent += bytes_sent_tmp;
 		send_size -= bytes_sent;
-		debug(("packetSend: sent %d bytes\n", bytes_sent));
 	} while (send_size > 0);  // account for truncation during send
 
 	// increment upper bound of window
@@ -250,6 +249,8 @@ static void packetReceive(void)
 	// TODO: receive ACK
 	int ackedPackets = SEQUENCE_NUMBER;
 
+	debug(("packetReceive: received ACK; Up to %d are now ACK'd\n", ackedPackets));
+
 	// pop all ACK'd packets off of FIFO
 	while (lower_sequence_number != ackedPackets) {
 		// pop oldest packet off of FIFO
@@ -260,6 +261,8 @@ static void packetReceive(void)
 		if (lower_sequence_number == SEQUENCE_NUMBER_MAX)
 			lower_sequence_number = 0;
 	}
+
+	debug(("packetReceive: window size is now %d\n", windowSize()));
 }
 
 
@@ -298,6 +301,8 @@ static void fifoPush(const packet_t* packet)
 	packet_fifo_write_cursor++;
 	if (packet_fifo_write_cursor == FIFO_SIZE)
 		packet_fifo_write_cursor = 0;
+
+	debug(("fifoPush: pushed packet; Write Cursor is now %d\n", packet_fifo_write_cursor));
 }
 
 
@@ -332,6 +337,8 @@ static void fifoPop(packet_t* packet)
 	packet_fifo_read_cursor++;
 	if (packet_fifo_read_cursor == FIFO_SIZE)
 		packet_fifo_read_cursor = 0;
+
+	debug(("fifoPop: popped packet; Read Cursor is now %d\n", packet_fifo_read_cursor));
 }
 
 
