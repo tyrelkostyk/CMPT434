@@ -136,9 +136,7 @@ int main(int argc, char* argv[])
 			packetSend(p);
 
 		// receive ACK, remove ACK'd packets from FIFO
-		// TODO: non-blocking?
-		while (windowSize() > window_size_limit)
-			packetReceive(p);
+		packetReceive(p);
 
 		// TODO: begin re-transmissions after timeout
 

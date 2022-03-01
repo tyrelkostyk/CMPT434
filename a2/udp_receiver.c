@@ -34,8 +34,8 @@ static void packetReceive(char* recv_buffer);
 int receiver_socket = 0;	// socket for listening
 int flags = 0;				// no flags necessary for receiving/sending
 
-struct sockaddr_storage sender_addr = { 0 };	// address of the sender
-socklen_t sender_addr_size = 0;					// size of sender's address
+struct sockaddr_storage sender_addr = { 0 };		// address of the sender
+socklen_t sender_addr_size = sizeof(sender_addr);	// size of sender's address
 
 
 /*******************************************************************************
@@ -169,7 +169,7 @@ static void packetSend(int expected)
 
 	// send the ACK packet
 	do {
-		debug(("ackSend: about to send: %s -- Len: %d\n", ack_packet.message, send_size));
+		debug(("packetSend: about to send: %d -- Len: %d\n", ack_packet.sequence_number, send_size));
 
 		// send over UDP
 		int bytes_sent = 0;
@@ -183,7 +183,7 @@ static void packetSend(int expected)
 
 		// check for errors
 		if (bytes_sent_tmp <= 0) {
-			printf("ackSend: failed to send (%d)\n", bytes_sent_tmp);
+			printf("packetSend: failed to send (%d)\n", bytes_sent_tmp);
 			exit(-1);
 		}
 
