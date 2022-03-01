@@ -23,7 +23,7 @@
 *******************************************************************************/
 
 static void packetHandle(const packet_t* packet);
-static void packetSend(int expected);
+static void packetSend(void);
 static void packetReceive(char* recv_buffer);
 
 
@@ -36,6 +36,8 @@ int flags = 0;				// no flags necessary for receiving/sending
 
 struct sockaddr_storage sender_addr = { 0 };		// address of the sender
 socklen_t sender_addr_size = sizeof(sender_addr);	// size of sender's address
+
+int expected_sequence_number = 0;
 
 
 /*******************************************************************************
@@ -125,16 +127,22 @@ int main(int argc, char* argv[])
 		packetHandle((const packet_t *)recv_buffer);
 
 		// exract the received sequence number
-		int sequence_number = ((packet_t*)recv_buffer)->sequence_number;
+		int received_sequence_number = ((packet_t*)recv_buffer)->sequence_number;
 
-		// TODO: evaluate received packet's sequence number
-		int expected_sequence_number = sequence_number + 1;
+		// send ACK and simulate dropped packets if received packet is correct (or a retransmission)
+		if ((received_sequence_number == expected_sequence_number)
+		||  (received_sequence_number == expected_sequence_number-1))
+		{
+			// send ACK packet
+			packetSend(expected_sequence_number);
 
-		// TODO: add simulation for corrupted messages and responses
+			// TODO: add simulation for corrupted messages and responses
 
-		// send ACK packet
-		packetSend(expected_sequence_number);
+		}
 
+		// increment expected sequence number if this one was expected
+		if (received_sequence_number == expected_sequence_number)
+			expected_sequence_number++;
 	}
 }
 
