@@ -26,6 +26,8 @@ static void packetHandle(const packet_t* packet);
 static void packetSend(void);
 static void packetReceive(char* recv_buffer);
 
+static int receiveY(void);
+
 
 /*******************************************************************************
                          PRIVATE DEFINITIONS AND GLOBALS
@@ -133,16 +135,23 @@ int main(int argc, char* argv[])
 		if ((received_sequence_number == expected_sequence_number)
 		||  (received_sequence_number == expected_sequence_number-1))
 		{
-			// send ACK packet
-			packetSend(expected_sequence_number);
 
-			// TODO: add simulation for corrupted messages and responses
+			// simulate possibly corrupted inbound message
+			if (receiveY()) {
 
+				// message received - increment expected sequence number
+				if (received_sequence_number == expected_sequence_number)
+					expected_sequence_number++;
+
+				// simulate possibly corrupted ACK response
+				if (receiveY()) {
+
+					// send ACK successfully (like normal)
+					packetSend();
+
+				}
+			}
 		}
-
-		// increment expected sequence number if this one was expected
-		if (received_sequence_number == expected_sequence_number)
-			expected_sequence_number++;
 	}
 }
 
@@ -164,11 +173,11 @@ static void packetHandle(const packet_t* packet)
 }
 
 
-static void packetSend(int expected)
+static void packetSend()
 {
 	// populate ACK packet with next expected sequence number
 	packet_t ack_packet = { 0 };
-	ack_packet.sequence_number = expected;
+	ack_packet.sequence_number = expected_sequence_number;
 	if (ack_packet.sequence_number == SEQUENCE_NUMBER_MAX)
 		ack_packet.sequence_number = 0;
 
@@ -218,4 +227,18 @@ static void packetReceive(char* recv_buffer)
 	}
 
 	debug(("%d bytes received from sender\n", bytes_received));
+}
+
+
+static int receiveY(void)
+{
+	// prompt user for input from stdin
+	fputs("prompt>> ", stdout);
+
+	// obtain user input message from stdin
+	size_t max_message_size = MAX_MESSAGE_LENGTH;	// max buffer size
+	char *input_message = NULL;						// pointer to input message
+	getline(&input_message, &max_message_size, stdin);
+
+	return (strncmp(input_message, "Y", 1) == 0);
 }
