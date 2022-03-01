@@ -48,7 +48,6 @@ int packet_fifo_read_cursor = 0;			// read cursor for FIFO
 
 int send_socket = 0;	// socket to transmit on
 int flags = 0;			// connection flags
-struct addrinfo *p;		// socket address info
 
 int upper_sequence_number = 0;	// top of window; latest non-ACK'd sent packet
 int lower_sequence_number = 0;	// bottom of window; oldest non-ACK'd sent packet
@@ -89,7 +88,7 @@ int main(int argc, char* argv[])
 			hostname, port, window_size_limit, timeout);
 
 	int error = 0;						// error tracking
-	struct addrinfo hints, *info;		// obtaining socket address info
+	struct addrinfo hints, *info, *p;	// obtaining socket address info
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -186,6 +185,7 @@ static void packetPrepare(void)
 	strncpy(packet.message, input_message, input_message_length);
 
 	// push packet onto FIFO queue
+	debug(("About to push <%d: %s> onto FIFO\n", packet.sequence_number, packet.message));
 	fifoPush(&packet);
 }
 
@@ -196,6 +196,12 @@ static void packetPrepare(void)
  */
 static void packetSend(struct addrinfo *p)
 {
+	// confirm that input pointer is valid
+	if (p == 0) {
+		debug(("packetSend: input pointer is NULL\n"));
+		exit(-1);
+	}
+
 	// obtain oldest packet from FIFO
 	packet_t packet = { 0 };
 	fifoPeek(&packet);
@@ -205,10 +211,11 @@ static void packetSend(struct addrinfo *p)
 
 	// send the message
 	do {
-		debug(("About to send: %s -- Len: %d\n", packet.message, send_size));
+		debug(("packetSend: About to send: %s -- Len: %d\n", packet.message, send_size));
 
 		// send over UDP
-		int bytes_sent, bytes_sent_tmp = 0;
+		int bytes_sent = 0;
+		int bytes_sent_tmp = 0;
 		bytes_sent_tmp = sendto(send_socket,
 								&((char*)&packet)[bytes_sent],
 								send_size,
@@ -218,14 +225,14 @@ static void packetSend(struct addrinfo *p)
 
 		// check for errors
 		if (bytes_sent_tmp <= 0) {
-			printf("Sender: failed to send\n");
+			printf("packetSend: failed to send (%d)\n", bytes_sent_tmp);
 			exit(-1);
 		}
 
 		// increment counter
 		bytes_sent += bytes_sent_tmp;
 		send_size -= bytes_sent;
-		debug(("Bytes sent: %d\n", bytes_sent));
+		debug(("packetSend: sent %d bytes\n", bytes_sent));
 	} while (send_size > 0);  // account for truncation during send
 
 	// increment upper bound of window
@@ -363,7 +370,7 @@ static void fifoPeek(packet_t* packet)
  * being pointed to by the read cursor.
  */
 static int fifoEmpty(void) {
-	return (!packet_fifo[packet_fifo_read_cursor].message);
+	return ((strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) == 0));
 }
 
 
@@ -375,5 +382,5 @@ static int fifoEmpty(void) {
  */
  static int fifoFull(void) {
 	return ((packet_fifo_write_cursor == packet_fifo_read_cursor)
-		&&  (packet_fifo[packet_fifo_read_cursor].message));
+		&&  (strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) > 0));
 }
