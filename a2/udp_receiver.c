@@ -18,6 +18,25 @@
 #include "defs.h"
 
 
+/*******************************************************************************
+                             PRIVATE FUNCTION STUBS
+*******************************************************************************/
+
+static void packetHandle(const packet_t* packet);
+static void packetSend(int expected);
+static void packetReceive(char* recv_buffer);
+
+
+/*******************************************************************************
+                         PRIVATE DEFINITIONS AND GLOBALS
+*******************************************************************************/
+
+int receiver_socket = 0;	// socket for listening
+int flags = 0;				// no flags necessary for receiving/sending
+
+struct sockaddr_storage sender_addr = { 0 };	// address of the sender
+socklen_t sender_addr_size = 0;					// size of sender's address
+
 
 /*******************************************************************************
                                       MAIN
@@ -45,21 +64,10 @@ int main(int argc, char* argv[])
 		   LOCAL_ADDRESS, recv_port);
 
 	int error;								// error checking
-	int listen_socket;						// socket for listening
    	struct addrinfo hints, *info, *p;		// obtaining socket address info
-	int flags = 0;							// no flags necessary for receiving/sending
+	char recv_buffer[MAX_BUFFER_LENGTH] = { 0 };	// local receive buffer
 
-   	// struct sockaddr_storage their_addr;	// the new connection's address
-   	// socklen_t addr_size;					// size of incoming socket address
-   	// socket_info_t socket_addr = { 0 };	// info and addr of new socket
-
-   	int bytes_received = 0;					// bytes read by recvfrom() call
-
-   	char recv_buffer[MAX_BUFFER_LENGTH];	// local receive buffer
-   	// char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
-
-	packet_t packet = { 0 };
-	// int sequence_number = 0;
+	// BIND TO A UDP SOCKET
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -76,14 +84,14 @@ int main(int argc, char* argv[])
 
    	// loop through all the results and bind to the first we can
    	for (p = info; p != NULL; p = p->ai_next) {
-   		listen_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-   		if (listen_socket == -1) {
+   		receiver_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+   		if (receiver_socket == -1) {
    			perror("Receiver: socket");
    			continue;
    		}
 
-   		if (bind(listen_socket, p->ai_addr, p->ai_addrlen) == -1) {
-   			close(listen_socket);
+   		if (bind(receiver_socket, p->ai_addr, p->ai_addrlen) == -1) {
+   			close(receiver_socket);
    			perror("Receiver: bind");
    			continue;
    		}
@@ -101,37 +109,105 @@ int main(int argc, char* argv[])
 	// all done with this structure; free it
    	freeaddrinfo(info);
 
-	// begin listening
+	// BEGIN RECEIVING
+
 	debug(("Receiver: Listening...\n"));
 
 	while (1) {
 
-		// reset counters, buffers
+		// reset receive buffer
 		memset(recv_buffer, 0, sizeof(recv_buffer));
-		memset(&packet, 0, sizeof(packet));
-		bytes_received = 0;
 
-		// receive message from client
-		bytes_received = recvfrom(listen_socket, recv_buffer, MAX_BUFFER_LENGTH-1, flags, NULL, NULL);
+		// receive message from sender
+		packetReceive(recv_buffer);
 
-		if (bytes_received <= 0) {
-			printf("Receiver: failed to receive\n");
-			exit(-1);
-		}
+		// handle received packet
+		packetHandle((const packet_t *)recv_buffer);
 
-		debug(("%d bytes received from sender\n", bytes_received));
+		// exract the received sequence number
+		int sequence_number = ((packet_t*)recv_buffer)->sequence_number;
 
-		// convert received data into packet
-		memcpy(&packet, recv_buffer, bytes_received);
-
-		// print the received message and sequence number to stdout
-		printf("%d: %s\n", packet.sequence_number, packet.message);
-
-		// TODO: check for validity
+		// TODO: evaluate received packet's sequence number
+		int expected_sequence_number = sequence_number + 1;
 
 		// TODO: add simulation for corrupted messages and responses
 
-		// TODO: send ACK
+		// send ACK packet
+		packetSend(expected_sequence_number);
 
 	}
+}
+
+
+/*******************************************************************************
+                               PRIVATE FUNCTIONS
+*******************************************************************************/
+
+static void packetHandle(const packet_t* packet)
+{
+	// confirm that packet pointer is valid
+	if (packet == 0) {
+		debug(("packetHandle: input pointer is NULL\n"));
+		exit(-1);
+	}
+
+	// print the received message and sequence number to stdout
+	printf("%d: %s\n", packet->sequence_number, packet->message);
+}
+
+
+static void packetSend(int expected)
+{
+	// populate ACK packet with next expected sequence number
+	packet_t ack_packet = { 0 };
+	ack_packet.sequence_number = expected;
+	if (ack_packet.sequence_number == SEQUENCE_NUMBER_MAX)
+		ack_packet.sequence_number = 0;
+
+	// ACK packet only populates the header; no message
+	int send_size = HEADER_SIZE;
+
+	// send the ACK packet
+	do {
+		debug(("ackSend: about to send: %s -- Len: %d\n", ack_packet.message, send_size));
+
+		// send over UDP
+		int bytes_sent = 0;
+		int bytes_sent_tmp = 0;
+		bytes_sent_tmp = sendto(receiver_socket,
+								&((char*)&ack_packet)[bytes_sent],
+								send_size,
+								flags,
+								(const struct sockaddr *)&sender_addr,
+								sender_addr_size);
+
+		// check for errors
+		if (bytes_sent_tmp <= 0) {
+			printf("ackSend: failed to send (%d)\n", bytes_sent_tmp);
+			exit(-1);
+		}
+
+		// increment counter
+		bytes_sent += bytes_sent_tmp;
+		send_size -= bytes_sent;
+	} while (send_size > 0);  // account for truncation during send
+}
+
+
+static void packetReceive(char* recv_buffer)
+{
+	// receive message from client
+	int bytes_received = recvfrom(receiver_socket,
+								  recv_buffer,
+								  MAX_BUFFER_LENGTH-1,
+								  flags,
+								  (struct sockaddr *)&sender_addr,
+								  &sender_addr_size);
+
+	if (bytes_received <= 0) {
+		printf("Receiver: failed to receive\n");
+		exit(-1);
+	}
+
+	debug(("%d bytes received from sender\n", bytes_received));
 }

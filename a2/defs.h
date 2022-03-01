@@ -21,6 +21,8 @@
 #define MAX_BUFFER_LENGTH	1024
 #define HEADER_SIZE			(sizeof(int))
 #define MAX_MESSAGE_LENGTH	(MAX_BUFFER_LENGTH-HEADER_SIZE)
+#define FIFO_SIZE			(8 << 1)
+#define SEQUENCE_NUMBER_MAX	(FIFO_SIZE)
 
 typedef struct _packet_t {
 	int sequence_number;

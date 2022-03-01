@@ -24,7 +24,7 @@ static int windowSize(void);
 
 static void packetPrepare(void);
 static void packetSend(struct addrinfo *p);
-static void packetReceive(void);
+static void packetReceive(struct addrinfo *p);
 
 static void fifoPush(const packet_t* packet);
 static void fifoPop(packet_t* packet);
@@ -37,16 +37,13 @@ static int fifoFull(void);
                          PRIVATE DEFINITIONS AND GLOBALS
 *******************************************************************************/
 
-
-#define FIFO_SIZE		(8 << 1)	// sender FIFO size
 #define SEQUENCE_NUMBER	(packet_fifo_write_cursor)	// index of FIFO used as sequence number
-#define SEQUENCE_NUMBER_MAX	(FIFO_SIZE)	// for wrap-around
 
 packet_t packet_fifo[FIFO_SIZE] = { 0 };	// sender FIFO queue
 int packet_fifo_write_cursor = 0;			// write cursor for FIFO
 int packet_fifo_read_cursor = 0;			// read cursor for FIFO
 
-int send_socket = 0;	// socket to transmit on
+int sender_socket = 0;	// socket to transmit on
 int flags = 0;			// connection flags
 
 int upper_sequence_number = 0;	// top of window; latest non-ACK'd sent packet
@@ -90,6 +87,8 @@ int main(int argc, char* argv[])
 	int error = 0;						// error tracking
 	struct addrinfo hints, *info, *p;	// obtaining socket address info
 
+	// SET UP A UDP SOCKET
+
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
    	hints.ai_family = AF_INET;		// use IPv4
@@ -104,8 +103,8 @@ int main(int argc, char* argv[])
 
 	// loop through all the results and bind to the first we can
 	for (p = info; p != NULL; p = p->ai_next) {
-		send_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		if (send_socket == -1) {
+		sender_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (sender_socket == -1) {
 			perror("Sender: socket");
 			continue;
 		}
@@ -123,7 +122,8 @@ int main(int argc, char* argv[])
 	// all done with this structure; free it
 	freeaddrinfo(info);
 
-	// ready to talk
+	// BEGIN SENDING
+
 	debug(("Sender: Ready to transmit...\n"));
 
 	while (1) {
@@ -138,7 +138,7 @@ int main(int argc, char* argv[])
 		// receive ACK, remove ACK'd packets from FIFO
 		// TODO: non-blocking?
 		while (windowSize() > window_size_limit)
-			packetReceive();
+			packetReceive(p);
 
 		// TODO: begin re-transmissions after timeout
 
@@ -216,7 +216,7 @@ static void packetSend(struct addrinfo *p)
 		// send over UDP
 		int bytes_sent = 0;
 		int bytes_sent_tmp = 0;
-		bytes_sent_tmp = sendto(send_socket,
+		bytes_sent_tmp = sendto(sender_socket,
 								&((char*)&packet)[bytes_sent],
 								send_size,
 								flags,
@@ -244,15 +244,29 @@ static void packetSend(struct addrinfo *p)
 /**
  * Receive a new ACK packet over UDP, popping ACK'd packets from the FIFO Queue.
  */
-static void packetReceive(void)
+static void packetReceive(struct addrinfo *p)
 {
-	// TODO: receive ACK
-	int ackedPackets = SEQUENCE_NUMBER;
+	// receive ACK
+	packet_t packet = { 0 };
+	int bytes_received = recvfrom(sender_socket,
+							  	  (char*)&packet,
+							  	  MAX_BUFFER_LENGTH-1,
+							  	  flags,
+							  	  NULL,
+							  	  NULL);
 
-	debug(("packetReceive: received ACK; Up to %d are now ACK'd\n", ackedPackets));
+	if (bytes_received <= 0) {
+		printf("packetReceive: failed to receive ACK\n");
+		exit(-1);
+	}
+
+	// retrieve sequence number from packet
+	int next_expected_sequence_number = packet.sequence_number;
+
+	debug(("packetReceive: received ACK; Up to %d are now ACK'd\n", next_expected_sequence_number));
 
 	// pop all ACK'd packets off of FIFO
-	while (lower_sequence_number != ackedPackets) {
+	while (lower_sequence_number != next_expected_sequence_number) {
 		// pop oldest packet off of FIFO
 		fifoPop(NULL);
 
