@@ -15,12 +15,15 @@
 #endif
 
 /** SHARED DEFINITIONS **/
-#define MAX_BUFFER_LENGTH	1024
 #define LOCAL_ADDRESS		"127.0.0.1"
+#define MAX_BUFFER_LENGTH	1024
+#define HEADER_SIZE			(sizeof(int))
+#define MAX_MESSAGE_LENGTH	(MAX_BUFFER_LENGTH-HEADER_SIZE)
 
 typedef struct _packet_t {
 	int sequence_number;
-	char message[MAX_BUFFER_LENGTH];
+	char message[MAX_MESSAGE_LENGTH];
 } packet_t;
+
 
 #endif  // _DEFS_H_

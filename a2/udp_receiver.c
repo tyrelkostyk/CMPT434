@@ -18,11 +18,6 @@
 #include "defs.h"
 
 
-/*******************************************************************************
-                             PRIVATE FUNCTION STUBS
-*******************************************************************************/
-
-
 
 /*******************************************************************************
                                       MAIN
@@ -30,11 +25,13 @@
 
 int main(int argc, char* argv[])
 {
+	// confirm input arguments
    if (argc < 2) {
 		printf("Error: invalid input received");
 		exit(-1);
 	}
 
+	// obtain settings from input arguments
 	char* recv_port = argv[1];
 
 	printf("UDP Receiver initializing...\n");

@@ -17,17 +17,37 @@
 
 
 /*******************************************************************************
+                             PRIVATE FUNCTION STUBS
+*******************************************************************************/
+
+static void packetPush(void);
+static void packetPop(void);
+
+
+/*******************************************************************************
+                         PRIVATE DEFINITIONS AND GLOBALS
+*******************************************************************************/
+
+#define FIFO_SIZE	100
+
+packet_t packet_fifo[FIFO_SIZE] = { 0 };
+int packet_fifo_write_cursor = 0;
+int packet_fifo_read_cursor = 0;
+
+
+/*******************************************************************************
                                       MAIN
 *******************************************************************************/
 
 int main(int argc, char* argv[])
 {
+	// confirm input arguments
 	if (argc < 5) {
 		printf("Error: invalid input received");
 		exit(-1);
 	}
 
-	// obtain settings from program arguments
+	// obtain settings from input arguments
 	char* hostname = argv[1];
 	char *port = argv[2];
 	int window_size = atoi(argv[3]);
@@ -42,7 +62,7 @@ int main(int argc, char* argv[])
 	struct addrinfo hints, *info, *p;	// obtaining socket address info
 	int flags = 0;						// connection flagsc
 
-	size_t max_buffer_size = MAX_BUFFER_LENGTH;	// max buffer size
+	size_t max_message_size = MAX_MESSAGE_LENGTH;	// max buffer size
 	char *input_message = NULL;			// local input message (from stdin)
 	int input_message_length = 0;		// length of input message
 
@@ -85,7 +105,7 @@ int main(int argc, char* argv[])
 	// all done with this structure; free it
 	freeaddrinfo(info);
 
-	// begin talking
+	// ready to talk
 	debug(("Sender: Ready to transmit...\n"));
 
 	while (1) {
@@ -99,43 +119,12 @@ int main(int argc, char* argv[])
 		input_message_length = 0;
 		send_size = 0;
 
-		// obtain user input message from stdin
-		fputs("send>> ", stdout);
-        getline(&input_message, &max_buffer_size, stdin);
+		// TODO: obtain new message (if non-ACK'd messages are less than the window size)
+		if ((packet_fifo_write_cursor - packet_fifo_read_cursor) < window_size)
+			packetPush();
 
-		// Strip newline
-        input_message_length = strnlen(input_message, MAX_BUFFER_LENGTH);
-        input_message[input_message_length-1] = 0;
-
-		// populate packet - add sequence number
-		packet.sequence_number = sequence_number;
-		strncpy(packet.message, input_message, input_message_length);
-		send_size = input_message_length + sizeof(sequence_number);
-
-		// TODO: add packet to FIFO queue
-
-		// TODO: only send message if non-ACK'd messages are less than the window size
-
-		// send the message
-		do {
-			// send over UDP
-			debug(("About to send: %s -- Len: %d\n", packet.message, send_size));
-			bytes_sent_tmp = sendto(send_socket,
-									&((char*)&packet)[bytes_sent],
-									send_size,
-									flags,
-									p->ai_addr,
-									p->ai_addrlen);
-			// check for errors
-			if (bytes_sent_tmp <= 0) {
-				printf("Sender: failed to send\n");
-				exit(-1);
-			}
-			// increment counter
-			bytes_sent += bytes_sent_tmp;
-			send_size -= bytes_sent;
-			debug(("Bytes sent: %d\n", bytes_sent));
-		} while (send_size > 0);  // account for truncation during send
+		// TODO: send available packets from FIFO
+		packetPop();
 
 		// TODO: receive ACK
 
@@ -147,4 +136,73 @@ int main(int argc, char* argv[])
 	}
 
 	return -1;
+}
+
+
+/*******************************************************************************
+                               PRIVATE FUNCTIONS
+*******************************************************************************/
+
+static void packetPush(void) {
+
+	// obtain user input message from stdin
+	fputs("send>> ", stdout);
+	getline(&input_message, &max_message_size, stdin);
+
+	// Strip newline
+	input_message_length = strnlen(input_message, MAX_MESSAGE_LENGTH);
+	input_message[input_message_length-1] = 0;
+
+	// populate packet - add sequence number
+	packet.sequence_number = sequence_number;
+	strncpy(packet.message, input_message, input_message_length);
+
+	// add packet to FIFO queue
+	memcpy(&packet_fifo[packet_fifo_write_cursor],
+		   &packet,
+		   input_message_length + HEADER_SIZE);
+
+	// increment FIFO write cursor
+	packet_fifo_write_cursor++;
+	
+}
+
+
+static void packetPop(void) {
+
+	// TODO: check cursor validity
+
+	// obtain oldest packet from FIFO
+	packet_t packet = { 0 };
+	int packet_size = strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE
+	memcpy(&packet,
+		   &packet_fifo[packet_fifo_read_cursor],
+		   packet_size);
+
+	// determine size of message
+	send_size = strnlen(packet.message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+
+	// send the message
+	do {
+		// send over UDP
+		debug(("About to send: %s -- Len: %d\n", packet.message, send_size));
+		bytes_sent_tmp = sendto(send_socket,
+								&((char*)&packet)[bytes_sent],
+								send_size,
+								flags,
+								p->ai_addr,
+								p->ai_addrlen);
+
+		// check for errors
+		if (bytes_sent_tmp <= 0) {
+			printf("Sender: failed to send\n");
+			exit(-1);
+		}
+
+		// increment counter
+		bytes_sent += bytes_sent_tmp;
+		send_size -= bytes_sent;
+		debug(("Bytes sent: %d\n", bytes_sent));
+	} while (send_size > 0);  // account for truncation during send
+
 }
