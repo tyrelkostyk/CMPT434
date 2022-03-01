@@ -25,14 +25,20 @@
 
 int main(int argc, char* argv[])
 {
-	// confirm input arguments
-   if (argc < 2) {
-		printf("Error: invalid input received");
+	// confirm number of input arguments
+   if (argc != 2) {
+		printf("Error: invalid input received\n");
 		exit(-1);
 	}
 
 	// obtain settings from input arguments
 	char* recv_port = argv[1];
+
+	// confirm port number is within valid bounds
+	if (atoi(recv_port) < PORT_MIN || atoi(recv_port) > PORT_MAX) {
+		printf("Error: port number not valid\n");
+		exit(-1);
+	}
 
 	printf("UDP Receiver initializing...\n");
 	printf("Sender may connect to the UDP Receiver via Address %s on Port %s\n",
@@ -53,7 +59,7 @@ int main(int argc, char* argv[])
    	// char send_buffer[MAX_BUFFER_LENGTH];	// local transmit buffer
 
 	packet_t packet = { 0 };
-	int sequence_number = 0;
+	// int sequence_number = 0;
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -128,6 +134,4 @@ int main(int argc, char* argv[])
 		// TODO: send ACK
 
 	}
-
-	return -1;
 }

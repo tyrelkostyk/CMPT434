@@ -20,19 +20,38 @@
                              PRIVATE FUNCTION STUBS
 *******************************************************************************/
 
-static void packetPush(void);
-static void packetPop(void);
+static int windowSize(void);
+
+static void packetPrepare(void);
+static void packetSend(struct addrinfo *p);
+static void packetReceive(void);
+
+static void fifoPush(const packet_t* packet);
+static void fifoPop(packet_t* packet);
+static void fifoPeek(packet_t* packet);
+static int fifoEmpty(void);
+static int fifoFull(void);
 
 
 /*******************************************************************************
                          PRIVATE DEFINITIONS AND GLOBALS
 *******************************************************************************/
 
-#define FIFO_SIZE	100
 
-packet_t packet_fifo[FIFO_SIZE] = { 0 };
-int packet_fifo_write_cursor = 0;
-int packet_fifo_read_cursor = 0;
+#define FIFO_SIZE		(8 << 1)	// sender FIFO size
+#define SEQUENCE_NUMBER	(packet_fifo_write_cursor)	// index of FIFO used as sequence number
+#define SEQUENCE_NUMBER_MAX	(FIFO_SIZE)	// for wrap-around
+
+packet_t packet_fifo[FIFO_SIZE] = { 0 };	// sender FIFO queue
+int packet_fifo_write_cursor = 0;			// write cursor for FIFO
+int packet_fifo_read_cursor = 0;			// read cursor for FIFO
+
+int send_socket = 0;	// socket to transmit on
+int flags = 0;			// connection flags
+struct addrinfo *p;		// socket address info
+
+int upper_sequence_number = 0;	// top of window; latest non-ACK'd sent packet
+int lower_sequence_number = 0;	// bottom of window; oldest non-ACK'd sent packet
 
 
 /*******************************************************************************
@@ -41,36 +60,36 @@ int packet_fifo_read_cursor = 0;
 
 int main(int argc, char* argv[])
 {
-	// confirm input arguments
-	if (argc < 5) {
-		printf("Error: invalid input received");
+	// confirm number of input arguments
+	if (argc != 5) {
+		printf("Error: invalid input received\n");
 		exit(-1);
 	}
 
 	// obtain settings from input arguments
 	char* hostname = argv[1];
 	char *port = argv[2];
-	int window_size = atoi(argv[3]);
+	int window_size_limit = atoi(argv[3]);
 	int timeout = atoi(argv[4]);
+
+	// confirm port number is within valid bounds
+	if (atoi(port) < PORT_MIN || atoi(port) > PORT_MAX) {
+		printf("Error: port number not valid\n");
+		exit(-1);
+	}
+
+	// confirm window size limit does not exceed size of FIFO Queue
+	if (window_size_limit > FIFO_SIZE) {
+		printf("Error: window size limit is too large\n");
+		exit(-1);
+	}
 
 	printf("UDP Sender initializing...\n");
 	printf("UDP Sender connecting to host %s on port %s.\nWindow size set to %d packets, and timeout set to %d seconds\n\n",
-			hostname, port, window_size, timeout);
+			hostname, port, window_size_limit, timeout);
 
 	int error = 0;						// error tracking
-	int send_socket = 0;				// socket to transmit on
-	struct addrinfo hints, *info, *p;	// obtaining socket address info
-	int flags = 0;						// connection flagsc
-
-	size_t max_message_size = MAX_MESSAGE_LENGTH;	// max buffer size
-	char *input_message = NULL;			// local input message (from stdin)
-	int input_message_length = 0;		// length of input message
-
-	packet_t packet = { 0 };
-	int sequence_number = 0;
-
-	int send_size = 0;
-	int bytes_sent, bytes_sent_tmp = 0;	// bytes sent by sendto() call
+	struct addrinfo hints, *info;		// obtaining socket address info
 
 	// prepare for a UDP socket using IPv4 on the local machine
    	memset(&hints, 0, sizeof(hints));
@@ -110,32 +129,21 @@ int main(int argc, char* argv[])
 
 	while (1) {
 
-		// reset buffers, pointers
-		memset(&packet, 0, sizeof(packet));
-		input_message = NULL;
+		// obtain new packet to send
+		packetPrepare();
 
-		// reset counters
-		bytes_sent = 0, bytes_sent_tmp = 0;
-		input_message_length = 0;
-		send_size = 0;
+		// send available packet from FIFO (if window size not exceeded)
+		if (windowSize() <= window_size_limit)
+			packetSend(p);
 
-		// TODO: obtain new message (if non-ACK'd messages are less than the window size)
-		if ((packet_fifo_write_cursor - packet_fifo_read_cursor) < window_size)
-			packetPush();
+		// receive ACK, remove ACK'd packets from FIFO
+		// TODO: non-blocking?
+		while (windowSize() > window_size_limit)
+			packetReceive();
 
-		// TODO: send available packets from FIFO
-		packetPop();
-
-		// TODO: receive ACK
-
-		// increment sequence number
-		sequence_number++;
-
-		// TODO: stop listening after timeout
+		// TODO: begin re-transmissions after timeout
 
 	}
-
-	return -1;
 }
 
 
@@ -143,49 +151,64 @@ int main(int argc, char* argv[])
                                PRIVATE FUNCTIONS
 *******************************************************************************/
 
-static void packetPush(void) {
+/**
+ * Provides the current size of the sender's window. Accounts for wrap-around.
+ */
+static int windowSize(void)
+{
+	if (upper_sequence_number >= lower_sequence_number)
+		return upper_sequence_number - lower_sequence_number;
 
-	// obtain user input message from stdin
-	fputs("send>> ", stdout);
-	getline(&input_message, &max_message_size, stdin);
-
-	// Strip newline
-	input_message_length = strnlen(input_message, MAX_MESSAGE_LENGTH);
-	input_message[input_message_length-1] = 0;
-
-	// populate packet - add sequence number
-	packet.sequence_number = sequence_number;
-	strncpy(packet.message, input_message, input_message_length);
-
-	// add packet to FIFO queue
-	memcpy(&packet_fifo[packet_fifo_write_cursor],
-		   &packet,
-		   input_message_length + HEADER_SIZE);
-
-	// increment FIFO write cursor
-	packet_fifo_write_cursor++;
-	
+	return lower_sequence_number - upper_sequence_number;
 }
 
 
-static void packetPop(void) {
+/**
+ * Receive a new message from stdin, store as packet in FIFO Queue.
+ */
+static void packetPrepare(void)
+{
+	// prompt user for input from stdin
+	fputs("send>> ", stdout);
 
-	// TODO: check cursor validity
+	// obtain user input message from stdin
+	size_t max_message_size = MAX_MESSAGE_LENGTH;	// max buffer size
+	char *input_message = NULL;						// pointer to input message
+	getline(&input_message, &max_message_size, stdin);
 
+	// Strip newline
+	int input_message_length = strnlen(input_message, MAX_MESSAGE_LENGTH);
+	input_message[input_message_length-1] = 0;
+
+	// populate packet - add sequence number
+	packet_t packet = { 0 };
+	packet.sequence_number = SEQUENCE_NUMBER;
+	strncpy(packet.message, input_message, input_message_length);
+
+	// push packet onto FIFO queue
+	fifoPush(&packet);
+}
+
+
+/**
+ * Send a packet (from FIFO Queue) over UDP.
+ * @param p Socket addr info.
+ */
+static void packetSend(struct addrinfo *p)
+{
 	// obtain oldest packet from FIFO
 	packet_t packet = { 0 };
-	int packet_size = strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE
-	memcpy(&packet,
-		   &packet_fifo[packet_fifo_read_cursor],
-		   packet_size);
+	fifoPeek(&packet);
 
 	// determine size of message
-	send_size = strnlen(packet.message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+	int send_size = strnlen(packet.message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
 
 	// send the message
 	do {
-		// send over UDP
 		debug(("About to send: %s -- Len: %d\n", packet.message, send_size));
+
+		// send over UDP
+		int bytes_sent, bytes_sent_tmp = 0;
 		bytes_sent_tmp = sendto(send_socket,
 								&((char*)&packet)[bytes_sent],
 								send_size,
@@ -205,4 +228,152 @@ static void packetPop(void) {
 		debug(("Bytes sent: %d\n", bytes_sent));
 	} while (send_size > 0);  // account for truncation during send
 
+	// increment upper bound of window
+	upper_sequence_number++;
+	if (upper_sequence_number == SEQUENCE_NUMBER_MAX)
+		upper_sequence_number = 0;
+}
+
+
+/**
+ * Receive a new ACK packet over UDP, popping ACK'd packets from the FIFO Queue.
+ */
+static void packetReceive(void)
+{
+	// TODO: receive ACK
+	int ackedPackets = SEQUENCE_NUMBER;
+
+	// pop all ACK'd packets off of FIFO
+	while (lower_sequence_number != ackedPackets) {
+		// pop oldest packet off of FIFO
+		fifoPop(NULL);
+
+		// increment lower bound of window
+		lower_sequence_number++;
+		if (lower_sequence_number == SEQUENCE_NUMBER_MAX)
+			lower_sequence_number = 0;
+	}
+}
+
+
+/**
+ * Place a new packet into the FIFO Queue.
+ * @param packet Pointer to a valid packet.
+ */
+static void fifoPush(const packet_t* packet)
+{
+	// confirm that packet pointer is valid
+	if (packet == 0) {
+		debug(("fifoPush: input pointer is NULL\n"));
+		exit(-1);
+	}
+
+	// confirm that there is room within FIFO
+	if (fifoFull()) {
+		debug(("fifoPush: FIFO is full\n"));
+		exit(-1);
+	}
+
+	// erase previous contents of FIFO entry
+	memset(&packet_fifo[packet_fifo_write_cursor],
+		   0,
+		   sizeof(packet_fifo[packet_fifo_write_cursor]));
+
+	// determine size of packet
+	int packet_size = strnlen(packet->message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+
+	// place new packet into FIFO
+	memcpy(&packet_fifo[packet_fifo_write_cursor],
+		   packet,
+		   packet_size);
+
+	// increment FIFO write cursor
+	packet_fifo_write_cursor++;
+	if (packet_fifo_write_cursor == FIFO_SIZE)
+		packet_fifo_write_cursor = 0;
+}
+
+
+/**
+ * Extract (and remove) a packet from the FIFO Queue.
+ * @param packet Pointer that packet will be extracted into. Set to NULL to ignore.
+ */
+static void fifoPop(packet_t* packet)
+{
+	// confirm that there is a valid packet within FIFO
+	if (fifoEmpty()) {
+		debug(("fifoPop: FIFO is empty\n"));
+		exit(-1);
+	}
+
+	// determine size of packet
+	int packet_size = strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+
+	// extract packet from FIFO
+	if (packet != NULL) {
+		memcpy(packet,
+			   &packet_fifo[packet_fifo_read_cursor],
+			   packet_size);
+	}
+
+	// erase packet contents from FIFO
+	memset(&packet_fifo[packet_fifo_read_cursor],
+		   0,
+		   sizeof(packet_fifo[packet_fifo_write_cursor]));
+
+	// increment FIFO read cursor
+	packet_fifo_read_cursor++;
+	if (packet_fifo_read_cursor == FIFO_SIZE)
+		packet_fifo_read_cursor = 0;
+}
+
+
+/**
+ * Extract (but don't remove) a packet from the FIFO Queue.
+ * @param packet Pointer that packet will be extracted into.
+ */
+static void fifoPeek(packet_t* packet)
+{
+	// confirm that packet pointer is valid
+	if (packet == 0) {
+		debug(("fifoPeek: input pointer is NULL\n"));
+		exit(-1);
+	}
+
+	// confirm that there is a valid packet within FIFO
+	if (fifoEmpty()) {
+		debug(("fifoPeek: FIFO is empty\n"));
+		exit(-1);
+	}
+
+	// determine size of packet
+	int packet_size = strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+
+	// extract packet from FIFO
+	memcpy(packet,
+		   &packet_fifo[packet_fifo_read_cursor],
+		   packet_size);
+}
+
+
+/**
+ * Indicates if the FIFO is empty.
+ *
+ * FIFO is said to be empty if there is no message data available in the packet
+ * being pointed to by the read cursor.
+ */
+static int fifoEmpty(void) {
+	return (!packet_fifo[packet_fifo_read_cursor].message);
+}
+
+
+/**
+ * Indicates if the FIFO is full.
+ *
+ * FIFO is said to be full if the write cursor has wrapped around back to the
+ * read cursor, AND there is still data being pointed to by the read cursor.
+ */
+ static int fifoFull(void) {
+	return ((packet_fifo_write_cursor == packet_fifo_read_cursor)
+		&&  (packet_fifo[packet_fifo_read_cursor].message));
 }
