@@ -7,9 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-#include <netdb.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -28,9 +30,11 @@ static void packetReceive(struct addrinfo *p);
 
 static void fifoPush(const packet_t* packet);
 static void fifoPop(packet_t* packet);
-static void fifoPeekNewest(packet_t* packet);
+static void fifoPeek(packet_t* packet);
 static int fifoEmpty(void);
 static int fifoFull(void);
+
+static void handleTimeouts(int timeout);
 
 
 /*******************************************************************************
@@ -48,6 +52,8 @@ int flags = 0;			// connection flags
 
 int upper_sequence_number = 0;	// top of window; latest non-ACK'd sent packet
 int lower_sequence_number = 0;	// bottom of window; oldest non-ACK'd sent packet
+
+time_t sent_times[FIFO_SIZE] = { 0 };	// times that each packet is sent
 
 
 /*******************************************************************************
@@ -109,6 +115,13 @@ int main(int argc, char* argv[])
 			continue;
 		}
 
+		// turn off blocking IO
+		error = fcntl(sender_socket, F_SETFL, O_NONBLOCK);
+		if (error != 0) {
+			fprintf(stderr, "Sender: fcntl: %s\n", gai_strerror(error));
+			return 2;
+		}
+
 		// a socket was successfully bound! All done here
 		break;
 	}
@@ -131,14 +144,15 @@ int main(int argc, char* argv[])
 		// obtain new packet to send
 		packetPrepare();
 
+		// begin re-transmissions if timeouts occur
+		handleTimeouts(timeout);
+
 		// send available packet from FIFO (if window size not exceeded)
 		if (windowSize() <= window_size_limit)
 			packetSend(p);
 
 		// receive ACK, remove ACK'd packets from FIFO
 		packetReceive(p);
-
-		// TODO: begin re-transmissions after timeout
 
 	}
 }
@@ -202,7 +216,7 @@ static void packetSend(struct addrinfo *p)
 
 	// obtain oldest packet from FIFO
 	packet_t packet = { 0 };
-	fifoPeekNewest(&packet);
+	fifoPeek(&packet);
 
 	// determine size of message
 	int send_size = strnlen(packet.message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
@@ -232,6 +246,10 @@ static void packetSend(struct addrinfo *p)
 		send_size -= bytes_sent;
 	} while (send_size > 0);  // account for truncation during send
 
+	// record time that this packet was sent
+	time_t time_now = time(NULL);
+	sent_times[upper_sequence_number] = time_now;
+
 	// increment upper bound of window
 	upper_sequence_number++;
 	if (upper_sequence_number == SEQUENCE_NUMBER_MAX)
@@ -253,10 +271,9 @@ static void packetReceive(struct addrinfo *p)
 							  	  NULL,
 							  	  NULL);
 
-	if (bytes_received <= 0) {
-		printf("packetReceive: failed to receive ACK\n");
-		exit(-1);
-	}
+	// if non-blocking check yielded no results then just exit
+	if (bytes_received <= 0)
+		return;
 
 	// retrieve sequence number from packet
 	int next_expected_sequence_number = packet.sequence_number;
@@ -355,29 +372,29 @@ static void fifoPop(packet_t* packet)
 
 
 /**
- * Extract (but don't remove) the newest packet from the FIFO Queue.
+ * Extract (but don't remove) the packet at the upper window boundary from the FIFO Queue.
  * @param packet Pointer that packet will be extracted into.
  */
-static void fifoPeekNewest(packet_t* packet)
+static void fifoPeek(packet_t* packet)
 {
 	// confirm that packet pointer is valid
 	if (packet == 0) {
-		debug(("fifoPeekNewest: input pointer is NULL\n"));
+		debug(("fifoPeek: input pointer is NULL\n"));
 		exit(-1);
 	}
 
 	// confirm that there is a valid packet within FIFO
 	if (fifoEmpty()) {
-		debug(("fifoPeekNewest: FIFO is empty\n"));
+		debug(("fifoPeek: FIFO is empty\n"));
 		exit(-1);
 	}
 
 	// determine size of packet
-	int packet_size = strnlen(packet_fifo[packet_fifo_write_cursor-1].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
+	int packet_size = strnlen(packet_fifo[upper_sequence_number-1].message, MAX_MESSAGE_LENGTH) + HEADER_SIZE;
 
 	// extract packet from FIFO
 	memcpy(packet,
-		   &packet_fifo[packet_fifo_write_cursor-1],
+		   &packet_fifo[upper_sequence_number-1],
 		   packet_size);
 }
 
@@ -402,4 +419,22 @@ static int fifoEmpty(void) {
  static int fifoFull(void) {
 	return ((packet_fifo_write_cursor == packet_fifo_read_cursor)
 		&&  (strnlen(packet_fifo[packet_fifo_read_cursor].message, MAX_MESSAGE_LENGTH) > 0));
+}
+
+
+/**
+ * Determines if a timeout occured on the oldest non-ACK'd packet. If so, it
+ * will reset the upper sequence number boundary to resend the timed-out packets.
+ */
+static void handleTimeouts(int timeout)
+{
+	// determine time right now
+	time_t time_now = time(NULL);
+
+	// extract time that oldest (non-ACK'd) packet was sent
+	time_t time_sent = sent_times[lower_sequence_number];
+
+	// if the oldest packet has timed out, reset upper sequence boundary
+	if (time_now - time_sent >= timeout)
+		upper_sequence_number = lower_sequence_number + 1;
 }
