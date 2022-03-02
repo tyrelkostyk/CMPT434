@@ -147,9 +147,12 @@ int main(int argc, char* argv[])
 		// begin re-transmissions if timeouts occur
 		handleTimeouts(timeout);
 
-		// send available packet from FIFO (if window size not exceeded)
-		if (windowSize() <= window_size_limit)
+		// send available packets from FIFO (if window size not exceeded)
+		while ((windowSize() <= window_size_limit)
+			&& (upper_sequence_number != packet_fifo_write_cursor))
+		{
 			packetSend(p);
+		}
 
 		// receive ACK, remove ACK'd packets from FIFO
 		packetReceive(p);

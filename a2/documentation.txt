@@ -3,3 +3,11 @@
  * Monday February 28 2022
  * Tyrel Kostyk - tck290 - 11216033
 **/
+
+Known Issues:
+- Testing timeouts is clunky due to the serialized nature of the Sender program,
+  i.e. the timeouts are evaluated once the function is ran, which gets blocked
+  by the user input step (the puts() call)
+    - I believe that this also messes up the accuracy of the timeouts, however
+	  I determined that the way around this issue (threads, e.g. pthreads and
+	  mutexes etc.) would have been too much additional work for the benefit.
